@@ -92,14 +92,14 @@ typedef struct sample_ra_msg2_t
     sample_ec_pub_t             g_b;        // the Endian-ness of Gb is
                                             // Little-Endian
     sample_spid_t               spid;
-     uint16_t					 quote_type; /* unlinkable Quote(0) or linkable Quote(0) in little endian*/
-    uint16_t					 kdf_id;	 /* key derivation function id in little endian. 
+     uint16_t                   quote_type; // unlinkable Quote(0) or linkable Quote(0) in little endian
+    uint16_t                    kdf_id;     /* key derivation function id in little endian. 
                                              0x0001 for AES-CMAC Entropy Extraction and Key Derivation */
     sample_ec_sign256_t         sign_gb_ga; // In little endian
     sample_mac_t                mac;        // mac_smk(g_b||spid||quote_type||
                                             //         sign_gb_ga)
     uint32_t                    sig_rl_size;
-    uint8_t                  sig_rl[];
+    uint8_t                     sig_rl[];
 } sample_ra_msg2_t;
 
 typedef struct sample_ra_msg3_t
@@ -108,7 +108,7 @@ typedef struct sample_ra_msg3_t
     sample_ec_pub_t             g_a;        // the Endian-ness of Ga is
                                             // Little-Endian
     sample_ps_sec_prop_desc_t   ps_sec_prop;
-    uint8_t                  quote[];
+    uint8_t                     quote[];
 } sample_ra_msg3_t;
 
 

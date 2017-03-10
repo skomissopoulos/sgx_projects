@@ -65,8 +65,10 @@ static const sgx_ec256_public_t g_sp_pub_key = {
 
 // Used to store the secret passed by the SP in the sample code. The
 // size is forced to be 8 bytes. Expected value is
-// 0x01,0x02,0x03,0x04,0x0x5,0x0x6,0x0x7
-uint8_t g_secret[8] = {0};
+// 0x01,0x02,0x03,0x04,0x0x5,0x06,0x07
+// Changed by Sotiri: Now is a sessionID that is constructed by the server.
+#define SECRET_SIZE 32
+uint8_t g_secret[SECRET_SIZE] = {0};
 
 
 // This ecall is a wrapper of sgx_ra_init to create the trusted
@@ -190,19 +192,17 @@ sgx_status_t verify_att_result_mac(sgx_ra_context_t context,
 }
 
 
-// Generate a secret information for the SP encrypted with SK.
+// Generate secret information for the SP encrypted with SK.
 // Input pointers aren't checked since the trusted stubs copy
 // them into EPC memory.
 //
 // @param context The trusted KE library key context.
 // @param p_secret Message containing the secret.
 // @param secret_size Size in bytes of the secret message.
-// @param p_gcm_mac The pointer the the AESGCM MAC for the
-//                 message.
+// @param p_gcm_mac The pointer the the AESGCM MAC for the message.
 //
-// @return SGX_ERROR_INVALID_PARAMETER - secret size if
-//         incorrect.
-// @return Any error produced by tKE  API to get SK key.
+// @return SGX_ERROR_INVALID_PARAMETER - secret size if incorrect.
+// @return Any error produced by tKE API to get SK key.
 // @return Any error produced by the AESGCM function.
 // @return SGX_ERROR_UNEXPECTED - the secret doesn't match the
 //         expected value.
@@ -217,7 +217,7 @@ sgx_status_t put_secret_data(
     sgx_ec_key_128bit_t sk_key;
 
     do {
-        if(secret_size != 8)
+        if(secret_size != SECRET_SIZE)
         {
             ret = SGX_ERROR_INVALID_PARAMETER;
             break;
@@ -245,7 +245,7 @@ sgx_status_t put_secret_data(
         bool secret_match = true;
         for(i=0;i<secret_size;i++)
         {
-            if(g_secret[i] != i)
+            if(g_secret[i] != 1)
             {
                 secret_match = false;
             }

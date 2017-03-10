@@ -81,10 +81,10 @@ typedef struct _sp_db_item_t
 {
     sample_ec_pub_t             g_a;
     sample_ec_pub_t             g_b;
-    sample_ec_key_128bit_t      vk_key;// Shared secret key for the REPORT_DATA
-    sample_ec_key_128bit_t      mk_key;// Shared secret key for generating MAC's
-    sample_ec_key_128bit_t      sk_key;// Shared secret key for encryption
-    sample_ec_key_128bit_t      smk_key;// Used only for SIGMA protocol
+    sample_ec_key_128bit_t      vk_key;  // Shared secret key for the REPORT_DATA
+    sample_ec_key_128bit_t      mk_key;  // Shared secret key for generating MAC's
+    sample_ec_key_128bit_t      sk_key;  // Shared secret key for encryption
+    sample_ec_key_128bit_t      smk_key; // Used only for SIGMA protocol
     sample_ec_priv_t            b;
     sample_ps_sec_prop_desc_t   ps_sec_prop;
 }sp_db_item_t;
@@ -94,7 +94,12 @@ static bool g_is_sp_registered = false;
 static int g_sp_credentials = 0;
 static int g_authentication_token = 0;
 
-uint8_t g_secret[8] = {0,1,2,3,4,5,6,7};
+uint8_t g_secret[32] = {
+    1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,
+    1,1,1,1,1,1,1,1,
+};
 
 sample_spid_t g_spid;
 
@@ -625,7 +630,7 @@ int sp_ra_proc_msg3_req(const sample_ra_msg3_t *p_msg3,
 
         // Generate shared secret and encrypt it with SK, if attestation passed.
         uint8_t aes_gcm_iv[SAMPLE_SP_IV_SIZE] = {0};
-        p_att_result_msg->secret.payload_size = 8;
+        p_att_result_msg->secret.payload_size = 32;
         if((IAS_QUOTE_OK == attestation_report.status) &&
            (IAS_PSE_OK == attestation_report.pse_status) &&
            (isv_policy_passed == true))
