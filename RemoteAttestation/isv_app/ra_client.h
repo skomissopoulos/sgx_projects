@@ -1,6 +1,12 @@
 #ifndef RA_CLIENT_H
 #define RA_CLIENT_H
 
+#include "mbedtls/net_v.h"
+#include "mbedtls/net_f.h"
+#include "mbedtls/ssl.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

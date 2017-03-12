@@ -62,6 +62,21 @@
 #include <string.h>
 
 
+static void my_debug( void *ctx, int level,
+                      const char *file, int line,
+                      const char *str )
+{
+    const char *p, *basename;
+    (void)(ctx);
+
+    /* Extract basename from file */
+    for( p = basename = file; *p != '\0'; p++ )
+        if( *p == '/' || *p == '\\' )
+            basename = p + 1;
+
+    mbedtls_printf("%s:%04d: |%d| %s", basename, line, level, str );
+}
+
 /*
  * Test recv/send functions that make sure each try returns
  * WANT_READ/WANT_WRITE at least once before sucesseding
@@ -685,7 +700,7 @@ int sotiri_recv(client_opt_t *opt, ssl_state_t *ssl_state, char *output, size_t 
         }
 
         len = ret;
-        buf[len] = '\0';
+        output[len] = '\0';
         mbedtls_printf( " %d bytes read\n\n%s", len, (char *) buf );
         ret = 0;
     }
@@ -728,7 +743,7 @@ int ra_client(client_opt_t *opt)
      * 6. Write the requests, read the responses.
      */
     char *headers[2] = {"GET /items/12372", "Content-Type: application/json"};
-    ret = sotiri_send(opt, &ssl_state->ssl, headers, 2, NULL);
+    ret = sotiri_send(opt, ssl_state, headers, 2, NULL);
     if (ret < 0) {
         sotiri_exit(ret, ssl_state);
         return ret;
@@ -738,7 +753,7 @@ int ra_client(client_opt_t *opt)
      * 7. Read the HTTP response
      */
     char output[1024];
-    ret = sotiri_recv(opt, &ssl_state->ssl, output, sizeof(output));
+    ret = sotiri_recv(opt, ssl_state, output, sizeof(output));
     if (ret < 0) {
         sotiri_exit(ret, ssl_state);
         return ret;
