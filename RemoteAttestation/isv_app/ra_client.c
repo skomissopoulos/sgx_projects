@@ -683,7 +683,8 @@ int ra_client(client_opt_t *opt)
     /*
      * 6. Write the requests, read the responses.
      */
-    ret = sotiri_send(opt, &ssl_state->ssl, headers, n_headers, NULL);
+    char *headers[2] = {"GET /items/12372", "Content-Type: application/json"};
+    ret = sotiri_send(opt, &ssl_state->ssl, headers, 2, NULL);
     if (ret < 0) {
         sotiri_exit(ret, ssl_state);
         return NULL;
@@ -692,7 +693,8 @@ int ra_client(client_opt_t *opt)
     /*
      * 7. Read the HTTP response
      */
-    ret = sotiri_recv(opt, &ssl_state->ssl, output, output_len);
+    char output[1024];
+    ret = sotiri_recv(opt, &ssl_state->ssl, output, sizeof(output));
     if (ret < 0) {
         sotiri_exit(ret, ssl_state);
         return NULL;
