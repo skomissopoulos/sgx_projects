@@ -156,7 +156,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
                                strlen( pers ) ) ) != 0 )
     {
         LL_CRITICAL(" mbedtls_ctr_drbg_seed returned -%#x", -ret);
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 
@@ -199,14 +199,14 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
     if( ret < 0 )
     {
         LL_CRITICAL("  mbedtls_x509_crt_parse returned -%#x", -ret);
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 
     if( ret != 0 )
     {
         LL_CRITICAL("  mbedtls_pk_parse_key returned -%#x", -ret );
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 #endif /* MBEDTLS_X509_CRT_PARSE_C */
@@ -226,7 +226,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
                              MBEDTLS_NET_PROTO_TCP : MBEDTLS_NET_PROTO_UDP ) ) != 0 )
     {
         LL_CRITICAL( " mbedtls_net_connect returned -%#x", -ret );
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 
@@ -237,7 +237,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
     if( ret != 0 )
     {
         LL_CRITICAL( " net_set_(non)block() returned -%#x", -ret );
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 
@@ -252,7 +252,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
                     MBEDTLS_SSL_PRESET_DEFAULT ) ) != 0 )
     {
         LL_CRITICAL( "mbedtls_ssl_config_defaults returned -%#x", -ret );
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 
@@ -273,7 +273,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
     if( ( ret = mbedtls_ssl_conf_max_frag_len( &ssl_state->conf, opt.mfl_code ) ) != 0 )
     {
         mbedtls_printf( "  mbedtls_ssl_conf_max_frag_len returned %d\n\n", ret );
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 #endif
@@ -340,7 +340,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
         if( ( ret = mbedtls_ssl_conf_own_cert( &ssl_state->conf, &ssl_state->clicert, &ssl_state->pkey ) ) != 0 )
         {
             mbedtls_printf( "  mbedtls_ssl_conf_own_cert returned %d\n\n", ret );
-            sotiri_exit();
+            sotiri_exit(ret, ssl_state);
             return NULL;
         }
     }
@@ -360,7 +360,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
     if( ( ret = mbedtls_ssl_setup( &ssl_state->ssl, &ssl_state->conf ) ) != 0 )
     {
         LL_CRITICAL("mbedtls_ssl_setup returned -%#x", -ret );
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 
@@ -368,7 +368,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
     if( ( ret = mbedtls_ssl_set_hostname( &ssl_state->ssl, opt.server_name ) ) != 0 )
     {
         LL_CRITICAL("mbedtls_ssl_set_hostname returned %d\n\n", ret );
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 #endif
@@ -381,7 +381,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
                                         strlen( opt.ecjpake_pw ) ) ) != 0 )
         {
             mbedtls_printf( "  mbedtls_ssl_set_hs_ecjpake_password returned %d\n\n", ret );
-            sotiri_exit();
+            sotiri_exit(ret, ssl_state);
             return NULL;
         }
     }
@@ -416,7 +416,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
                     "to an appropriate value."
                     "Alternatively, you may want to use "
                     "auth_mode=optional for testing purposes." );
-            sotiri_exit();
+            sotiri_exit(ret, ssl_state);
             return NULL;
         }
     }
@@ -441,7 +441,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
         if( ( ret = mbedtls_ssl_get_session( &ssl_state->ssl, &ssl_state->saved_session ) ) != 0 )
         {
             LL_CRITICAL("mbedtls_ssl_get_session returned -%#x", -ret );
-            sotiri_exit();
+            sotiri_exit(ret, ssl_state);
             return NULL;
         }
 
@@ -493,7 +493,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
                 ret != MBEDTLS_ERR_SSL_WANT_WRITE )
             {
                 mbedtls_printf( "  mbedtls_ssl_renegotiate returned %d\n\n", ret );
-                sotiri_exit();
+                sotiri_exit(ret, ssl_state);
                 return NULL;
             }
         }
@@ -503,6 +503,7 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
 
     return ssl_state;
 }
+
 
 int sotiri_send(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *headers[], int n_headers, const char *body)
 {
@@ -556,6 +557,7 @@ int sotiri_send(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *headers[], 
 
     return 0;
 }
+
 
 int sotiri_recv(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *output, size_t output_len)
 {
@@ -683,7 +685,7 @@ int ra_client(client_opt_t *opt)
      */
     ret = sotiri_send(opt, &ssl_state->ssl, headers, n_headers, NULL);
     if (ret < 0) {
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
 
@@ -692,7 +694,7 @@ int ra_client(client_opt_t *opt)
      */
     ret = sotiri_recv(opt, &ssl_state->ssl, output, output_len);
     if (ret < 0) {
-        sotiri_exit();
+        sotiri_exit(ret, ssl_state);
         return NULL;
     }
     mbedtls_printf(" Received: %s\n\n", output);
@@ -707,7 +709,7 @@ int ra_client(client_opt_t *opt)
      * Cleanup and exit
      */
     ret = 0;
-    sotiri_exit();
+    sotiri_exit(ret, ssl_state);
 }
 #endif /* MBEDTLS_BIGNUM_C && MBEDTLS_ENTROPY_C && MBEDTLS_SSL_TLS_C &&
           MBEDTLS_SSL_CLI_C && MBEDTLS_NET_C && MBEDTLS_RSA_C &&
