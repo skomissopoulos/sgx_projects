@@ -20,10 +20,11 @@
  */
 
 #include "Enclave_t.h"
-#include "s_client.h"
-#include "RootCerts.h"
 #include "Log.h"
 #include "pprint.h"
+#include "ra_client.h"
+#include "RootCerts.h"
+#include "s_client.h"
 
 #if !defined(MBEDTLS_CONFIG_FILE)
 #include "mbedtls/config.h"
@@ -61,19 +62,68 @@
 #include <string.h>
 
 
-typedef struct {
-    mbedtls_ssl_config conf;
-    mbedtls_ctr_drbg_context ctr_drbg;
-    mbedtls_entropy_context entropy;
+/*
+ * Test recv/send functions that make sure each try returns
+ * WANT_READ/WANT_WRITE at least once before sucesseding
+ */
+static int my_recv( void *ctx, unsigned char *buf, size_t len )
+{
+    static int first_try = 1;
+    int ret;
 
-    mbedtls_ssl_session saved_session;
-    mbedtls_net_context server_fd;
-    mbedtls_ssl_context ssl;
+    if( first_try )
+    {
+        first_try = 0;
+        return( MBEDTLS_ERR_SSL_WANT_READ );
+    }
 
-    mbedtls_x509_crt cacert;
-    mbedtls_x509_crt clicert;
-    mbedtls_pk_context pkey;
-} ssl_state_t;
+    ret = mbedtls_net_recv( ctx, buf, len );
+    if( ret != MBEDTLS_ERR_SSL_WANT_READ )
+        first_try = 1; /* Next call will be a new operation */
+    return( ret );
+}
+
+static int my_send( void *ctx, const unsigned char *buf, size_t len )
+{
+    static int first_try = 1;
+    int ret;
+
+    if( first_try )
+    {
+        first_try = 0;
+        return( MBEDTLS_ERR_SSL_WANT_WRITE );
+    }
+
+    ret = mbedtls_net_send( ctx, buf, len );
+    if( ret != MBEDTLS_ERR_SSL_WANT_WRITE )
+        first_try = 1; /* Next call will be a new operation */
+    return( ret );
+}
+
+#if defined(MBEDTLS_X509_CRT_PARSE_C)
+/*
+ * Enabled if debug_level > 1 in code below
+ */
+static int my_verify( void *data, mbedtls_x509_crt *crt, int depth, uint32_t *flags )
+{
+    char buf[1024];
+    ((void) data);
+
+    mbedtls_printf( "\nVerify requested for (Depth %d):\n", depth );
+    mbedtls_x509_crt_info( buf, sizeof( buf ) - 1, "", crt );
+    mbedtls_printf( "%s", buf );
+
+    if ( ( *flags ) == 0 )
+        mbedtls_printf( "  This certificate has no flags\n" );
+    else
+    {
+        mbedtls_x509_crt_verify_info( buf, sizeof( buf ), "  ! ", *flags );
+        mbedtls_printf( "%s\n", buf );
+    }
+
+    return( 0 );
+}
+#endif /* MBEDTLS_X509_CRT_PARSE_C */
 
 
 ssl_state_t *new_ssl_state_t()
@@ -505,11 +555,8 @@ ssl_state_t *sotiri_connect(client_opt_t *_opt)
 }
 
 
-int sotiri_send(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *headers[], int n_headers, const char *body)
+int sotiri_send(client_opt_t *opt, ssl_state_t *ssl_state, char *headers[], int n_headers, const char *body)
 {
-    client_opt_t opt = *_opt;
-    mbedtls_ssl_context ssl = *_ssl;
-
     char buf[1024];
     size_t len = 0;
     int ret = -1;
@@ -525,7 +572,7 @@ int sotiri_send(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *headers[], 
     size_t written;
     int frags;
 
-    if (opt.transport == MBEDTLS_SSL_TRANSPORT_STREAM) {
+    if (opt->transport == MBEDTLS_SSL_TRANSPORT_STREAM) {
         for (written = 0, frags = 0; written < len; written += ret, frags++) {
             while ((ret = mbedtls_ssl_write(&ssl_state->ssl, buf + written, len - written)) <= 0) {
                 if (ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE) {
@@ -553,35 +600,33 @@ int sotiri_send(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *headers[], 
     LL_LOG("%d bytes written in %d fragments", written, frags);
     LL_LOG("%s", (char*) buf);
 
-    if (opt.debug_level > 0) hexdump("Bytes written:", buf, written);
+    if (opt->debug_level > 0) hexdump("Bytes written:", buf, written);
 
     return 0;
 }
 
 
-int sotiri_recv(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *output, size_t output_len)
+int sotiri_recv(client_opt_t *opt, ssl_state_t *ssl_state, char *output, size_t output_len)
 {
-    client_opt_t opt = *_opt;
-    mbedtls_ssl_context ssl = *_ssl;
+    size_t len;
+    int ret;
 
     /*
      * TLS and DTLS need different reading styles (stream vs datagram)
      */
-    if( opt.transport == MBEDTLS_SSL_TRANSPORT_STREAM )
-    {
-        do
-        {
-            size_t len = output_len - 1;
+    if (opt->transport == MBEDTLS_SSL_TRANSPORT_STREAM) {
+        do {
+            len = output_len - 1;
             memset(output, 0, output_len);
-            int ret = mbedtls_ssl_read( &ssl_state->ssl, output, len );
+            ret = mbedtls_ssl_read( &ssl_state->ssl, output, len );
 
-            if( ret == MBEDTLS_ERR_SSL_WANT_READ ||
-                ret == MBEDTLS_ERR_SSL_WANT_WRITE )
+            if (ret == MBEDTLS_ERR_SSL_WANT_READ ||
+                ret == MBEDTLS_ERR_SSL_WANT_WRITE)
                 continue;
 
-            if( ret <= 0 )
+            if (ret <= 0)
             {
-                switch( ret )
+                switch (ret)
                 {
                     case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
                         mbedtls_printf( " connection was closed gracefully\n" );
@@ -598,11 +643,11 @@ int sotiri_recv(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *output, siz
 
             len = ret;
 
-            LL_LOG( "get %d bytes ending with %x", len, output[len-1]);
-            if (opt.debug_level> 0) hexdump("REPONSE:", output, len);
+            LL_LOG("get %d bytes ending with %x", len, output[len-1]);
+            if (opt->debug_level> 0) hexdump("REPONSE:", output, len);
             // TODO: Add full-fledge HTTP parser here
             // possibly from libcurl
-            if( ret > 0 && (output[len-1] == '\n' || output[len-1] == '}'))
+            if (ret > 0 && (output[len-1] == '\n' || output[len-1] == '}'))
             {
                 ret = 0;
                 output[len] = 0;
@@ -614,22 +659,19 @@ int sotiri_recv(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *output, siz
             output_len -= len;
         }
 #pragma warning (disable: 4127)
-        while( 1 );
+        while(1);
 #pragma warning (default: 4127)
     }
-    else /* Not stream, so datagram */
-    {
-        len = sizeof( buf ) - 1;
-        memset( buf, 0, sizeof( buf ) );
+    else {
+        /* Not stream, so datagram */
+        len = output_len - 1;
+        memset(output, 0, output_len);
 
-        do ret = mbedtls_ssl_read( &ssl_state->ssl, buf, len );
-        while( ret == MBEDTLS_ERR_SSL_WANT_READ ||
-               ret == MBEDTLS_ERR_SSL_WANT_WRITE );
+        do ret = mbedtls_ssl_read(&ssl_state->ssl, output, len);
+        while (ret == MBEDTLS_ERR_SSL_WANT_READ || ret == MBEDTLS_ERR_SSL_WANT_WRITE);
 
-        if( ret <= 0 )
-        {
-            switch( ret )
-            {
+        if (ret <= 0) {
+            switch (ret) {
                 case MBEDTLS_ERR_SSL_TIMEOUT:
                     mbedtls_printf( " timeout\n" );
 
@@ -654,6 +696,7 @@ int sotiri_recv(client_opt_t *_opt, mbedtls_ssl_context *_ssl, char *output, siz
 
 void sotiri_close_notify(client_opt_t *opt, ssl_state_t *ssl_state)
 {
+    int ret;
     /* No error checking; may already be closed on other side. */
     do ret = mbedtls_ssl_close_notify(&ssl_state->ssl);
     while (ret == MBEDTLS_ERR_SSL_WANT_WRITE);
@@ -678,6 +721,7 @@ void sotiri_exit(int err_code, ssl_state_t *ssl_state)
 
 int ra_client(client_opt_t *opt)
 {
+    int ret;
     ssl_state_t *ssl_state = sotiri_connect(opt);
 
     /*
@@ -687,7 +731,7 @@ int ra_client(client_opt_t *opt)
     ret = sotiri_send(opt, &ssl_state->ssl, headers, 2, NULL);
     if (ret < 0) {
         sotiri_exit(ret, ssl_state);
-        return NULL;
+        return ret;
     }
 
     /*
@@ -697,7 +741,7 @@ int ra_client(client_opt_t *opt)
     ret = sotiri_recv(opt, &ssl_state->ssl, output, sizeof(output));
     if (ret < 0) {
         sotiri_exit(ret, ssl_state);
-        return NULL;
+        return ret;
     }
     mbedtls_printf(" Received: %s\n\n", output);
 
@@ -712,6 +756,7 @@ int ra_client(client_opt_t *opt)
      */
     ret = 0;
     sotiri_exit(ret, ssl_state);
+    return ret;
 }
 #endif /* MBEDTLS_BIGNUM_C && MBEDTLS_ENTROPY_C && MBEDTLS_SSL_TLS_C &&
           MBEDTLS_SSL_CLI_C && MBEDTLS_NET_C && MBEDTLS_RSA_C &&
