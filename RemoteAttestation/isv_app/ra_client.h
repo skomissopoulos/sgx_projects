@@ -7,6 +7,8 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 
+#include "s_client.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -688,20 +688,20 @@ int sotiri_recv(client_opt_t *opt, ssl_state_t *ssl_state, char *output, size_t 
         if (ret <= 0) {
             switch (ret) {
                 case MBEDTLS_ERR_SSL_TIMEOUT:
-                    mbedtls_printf( " timeout\n" );
+                    mbedtls_printf(" timeout\n");
 
                 case MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY:
-                    mbedtls_printf( " connection was closed gracefully\n" );
+                    mbedtls_printf(" connection was closed gracefully\n");
 
                 default:
-                    mbedtls_printf( " mbedtls_ssl_read returned -0x%x\n", -ret );
+                    mbedtls_printf(" mbedtls_ssl_read returned -0x%x\n", -ret);
             }
             return ret;
         }
 
         len = ret;
         output[len] = '\0';
-        mbedtls_printf( " %d bytes read\n\n%s", len, (char *) buf );
+        mbedtls_printf(" %d bytes read\n\n%s", len, (char *) output);
         ret = 0;
     }
 
